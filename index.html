@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover"/>
   <title>Spaciable Tetris</title>
   <style>
     :root{
@@ -14,10 +14,12 @@
       --cellBorder:rgba(255,255,255,.10);
       --gap:2px;
       --cellSize:26px;
+      /* Background image (40% opacity via ::before) */
+      --bgImage:url('https://images.squarespace-cdn.com/content/64edc4eea3459328995c51ca/108cfaa7-05fb-4e0a-8f81-0c0396a7faad/Untitled+design+-+2024-11-06T135610.850.png?content-type=image%2Fpng');
     }
     *{box-sizing:border-box}
     html,body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,Segoe UI,Roboto,Arial;height:100%}
-    .wrap{min-height:100vh;display:flex;justify-content:center;padding:8px}
+    .wrap{min-height:100svh;min-height:100dvh;min-height:100vh;display:flex;justify-content:center;padding:8px}
     .grid{display:grid;gap:8px;grid-template-columns:1fr auto 280px;max-width:1100px;width:100%}
     @media(max-width:980px){.grid{grid-template-columns:1fr}}
     .card{background:#0d2b3f;border:1px solid var(--border);border-radius:16px;padding:12px}
@@ -38,19 +40,45 @@
       box-shadow:inset 0 0 6px rgba(0,0,0,.25)
     }
     .boardWrap{display:flex;justify-content:center}
-    .board{position:relative;background:#0b1f2c;border:1px solid var(--border);border-radius:12px;padding:6px;overflow:hidden}
+    .board{
+      position:relative;
+      background:#0b1f2c;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:6px;
+      overflow:hidden;
+      touch-action:manipulation;
+    }
+    /* Background image layer behind the grid */
+    .board::before{
+      content:"";
+      position:absolute;
+      inset:6px;
+      background-image:var(--bgImage);
+      background-size:cover;
+      background-position:center;
+      opacity:.40;
+      border-radius:8px;
+      z-index:0;
+      pointer-events:none;
+      filter:saturate(1) contrast(1.05);
+    }
     .rightCol{display:flex;flex-direction:column;gap:12px}
 
-    /* Touch control pad */
+    /* Touch control pad (floats above content, but we keep it narrow) */
     #touchControls {
       display:none;
       position:fixed;
-      bottom:10px;left:50%;
+      left:50%;
+      bottom: clamp(8px, 2vh, 16px);
       transform:translateX(-50%);
-      display:flex;gap:8px;
+      gap:8px;
       background:rgba(13,43,63,0.85);
-      padding:8px 12px;border-radius:12px;
+      padding:8px 12px;
+      border-radius:12px;
       z-index:1000;
+      -webkit-user-select:none; user-select:none;
+      box-shadow:0 6px 20px rgba(0,0,0,.25);
     }
     #touchControls button {
       font-size:20px;
@@ -61,7 +89,11 @@
       color:#fff;
       cursor:pointer;
     }
-    @media(max-width:768px){ #touchControls{display:flex;} }
+    @media(max-width:768px){
+      #touchControls{display:flex;}
+      /* Stack side panels under the board on mobile for more vertical space */
+      .grid{grid-template-columns:1fr}
+    }
   </style>
 </head>
 <body>
@@ -79,7 +111,7 @@
         <input id="spdInput" type="number" min="1" max="20" value="1"/>
         <div><input id="fixedChk" type="checkbox"/> <span class="label">Keep speed fixed</span></div>
       </div>
-      <div style="margin-top:8px;display:flex;gap:6px">
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
         <button id="startBtn" class="btn btn-start">Start</button>
         <button id="pauseBtn" class="btn btn-pause">Pause</button>
         <button id="resetBtn" class="btn btn-reset">Reset</button>
@@ -89,7 +121,11 @@
       <div class="label">Level: <span id="levelVal" class="val">1</span></div>
       <div class="label">Time: <span id="timeVal" class="val">02:00</span></div>
     </div>
-    <div class="boardWrap"><div class="board"><div id="board" class="cells"></div></div></div>
+
+    <div class="boardWrap">
+      <div class="board"><div id="board" class="cells"></div></div>
+    </div>
+
     <div class="rightCol">
       <div class="card"><div class="label">Next</div><div id="nextWrap"></div></div>
       <div class="card"><div class="label">Leaderboard</div><ol id="lb"></ol></div>
@@ -98,17 +134,17 @@
 </div>
 
 <!-- Touch controls -->
-<div id="touchControls">
-  <button data-action="left">←</button>
-  <button data-action="rotate">⟳</button>
-  <button data-action="right">→</button>
-  <button data-action="down">↓</button>
-  <button data-action="hard">⏬</button>
+<div id="touchControls" aria-label="Touch controls">
+  <button data-action="left"   aria-label="Move left">←</button>
+  <button data-action="rotate" aria-label="Rotate">⟳</button>
+  <button data-action="right"  aria-label="Move right">→</button>
+  <button data-action="down"   aria-label="Soft drop">↓</button>
+  <button data-action="hard"   aria-label="Hard drop">⏬</button>
 </div>
 
 <script>
 (function(){
-  const COLS=10,ROWS=20;
+  const COLS=10, ROWS=20;
   const STORAGE_LB='custom-tetris-leaderboard';
   const SHAPES={
     I:[[0,0,0,0],[1,1,1,1]],
@@ -122,10 +158,10 @@
   const COLORS={I:'#22d3ee',J:'#3b82f6',L:'#f59e0b',O:'#fde047',S:'#34d399',T:'#a855f7',Z:'#f43f5e'};
 
   const $=id=>document.getElementById(id);
-  const boardEl=$('board'),nextWrap=$('nextWrap'),lbEl=$('lb');
-  const scoreVal=$('scoreVal'),linesVal=$('linesVal'),levelVal=$('levelVal'),timeVal=$('timeVal');
-  const minInput=$('minInput'),secInput=$('secInput'),spdInput=$('spdInput'),fixedChk=$('fixedChk');
-  const startBtn=$('startBtn'),pauseBtn=$('pauseBtn'),resetBtn=$('resetBtn');
+  const boardEl=$('board'), nextWrap=$('nextWrap'), lbEl=$('lb');
+  const scoreVal=$('scoreVal'), linesVal=$('linesVal'), levelVal=$('levelVal'), timeVal=$('timeVal');
+  const minInput=$('minInput'), secInput=$('secInput'), spdInput=$('spdInput'), fixedChk=$('fixedChk');
+  const startBtn=$('startBtn'), pauseBtn=$('pauseBtn'), resetBtn=$('resetBtn');
 
   let board,queue,current,score,lines,level,dropInterval,gravTimer,tickTimer,running,paused,totalSeconds,remaining,startSpeed,fixedSpeed;
 
@@ -133,6 +169,7 @@
   const clone=b=>b.map(r=>r.slice());
   function randomBag(){return ['I','J','L','O','S','T','Z'].sort(()=>Math.random()-.5)}
   function piece(t){const s=SHAPES[t].map(r=>r.slice());return{type:t,shape:s,x:3,y:-2}}
+
   function collide(b,p,dx=0,dy=0){
     for(let r=0;r<p.shape.length;r++){
       for(let c=0;c<p.shape[r].length;c++){
@@ -156,17 +193,33 @@
     for(let i=0;i<COLS*ROWS;i++){const d=document.createElement('div');d.className='cell';boardEl.appendChild(d)}
   }
 
+  // Make the board as big as possible in the current viewport, accounting for UI
   function fitBoardToViewport(){
     const container=document.querySelector('.board');
     if(!container)return;
-    const w=container.clientWidth-12;
-    const rect=container.getBoundingClientRect();
-    const h=window.innerHeight-rect.top-80; // 80px breathing room
+
+    // Available width (inner content area)
+    const w = container.clientWidth - 12;
+
+    // Available height: from top of the board to the bottom of the viewport,
+    // minus touch controls (if visible) and a little breathing room.
+    const rect = container.getBoundingClientRect();
+    let h = window.innerHeight - rect.top;
+
+    const tc = document.getElementById('touchControls');
+    if (tc && getComputedStyle(tc).display!=='none') {
+      h -= (tc.offsetHeight + 24);
+    } else {
+      h -= 24;
+    }
+
     const gap=2;
     const sizeW=Math.floor((w-(COLS-1)*gap)/COLS);
     const sizeH=Math.floor((h-(ROWS-1)*gap)/ROWS);
-    const size=Math.max(14,Math.min(30,Math.min(sizeW,sizeH)));
-    document.documentElement.style.setProperty('--cellSize',size+'px');
+
+    // Clamp to sensible limits
+    const size=Math.max(14,Math.min(32,Math.min(sizeW,sizeH)));
+    document.documentElement.style.setProperty('--cellSize', size+'px');
   }
 
   function draw(){
@@ -189,8 +242,10 @@
     scoreVal.textContent=score;linesVal.textContent=lines;levelVal.textContent=level;
     timeVal.textContent=String(Math.floor(remaining/60)).padStart(2,'0')+':'+String(remaining%60).padStart(2,'0');
   }
+
   function drawNext(){
-    nextWrap.innerHTML='';queue.slice(0,3).forEach(t=>{
+    nextWrap.innerHTML='';
+    queue.slice(0,3).forEach(t=>{
       const shape=SHAPES[t],scale=12,mini=document.createElement('div');
       mini.style.display='grid';mini.style.gap='2px';
       mini.style.gridTemplateColumns=`repeat(${shape[0].length}, ${scale}px)`;
@@ -200,12 +255,14 @@
         d.style.background=v?COLORS[t]:'rgba(255,255,255,.12)';
         d.style.borderRadius='2px';
         mini.appendChild(d);
-      });nextWrap.appendChild(mini);
+      });
+      nextWrap.appendChild(mini);
     });
   }
 
   function refill(){if(queue.length<7)queue=queue.concat(randomBag())}
   function spawn(){refill();current=piece(queue.shift());drawNext();if(collide(board,current))endGame()}
+
   function levelInterval(l){return Math.max(120,800-(l-1)*60)}
   function startGame(){
     if(running)return;
@@ -228,25 +285,32 @@
   function lock(){board=merge(board,current);const {board:nb,cleared}=clearLines(board);board=nb;if(cleared){score+=(cleared*100)*level;lines+=cleared;if(!fixedSpeed){const nl=Math.floor(lines/10)+startSpeed;if(nl!==level){level=nl;clearInterval(gravTimer);gravTimer=setInterval(()=>{if(!paused&&running)softDrop();},levelInterval(level));}}}spawn();draw();}
   function softDrop(){if(current&&!collide(board,current,0,1))current.y++;else lock();draw();}
   function hardDrop(){while(current&&!collide(board,current,0,1))current.y++;lock();}
+
   function loadLB(){try{return JSON.parse(localStorage.getItem(STORAGE_LB)||'[]');}catch{return[]}}
   function saveLB(x){localStorage.setItem(STORAGE_LB,JSON.stringify(x))}
   function renderLB(){const items=loadLB().slice(0,10);lbEl.innerHTML='';if(items.length===0){lbEl.innerHTML='<li>No scores yet</li>';return;}items.forEach((it,i)=>{const li=document.createElement('li');li.textContent=(i+1)+'. '+(it.name||'Player')+' — '+it.score;lbEl.appendChild(li);});}
 
-  startBtn.onclick=startGame;pauseBtn.onclick=pauseResume;resetBtn.onclick=resetGame;
+  // Bind buttons (ensure they exist before binding)
+  startBtn?.addEventListener('click',startGame);
+  pauseBtn?.addEventListener('click',pauseResume);
+  resetBtn?.addEventListener('click',resetGame);
+
+  // Keyboard
   window.addEventListener('keydown',e=>{
-    if(!running||paused||!current)return;
+    if(e.code==='Space') e.preventDefault();
+    if(e.code==='KeyP'){ e.preventDefault(); return pauseResume(); }
+    if(e.code==='KeyR'){ e.preventDefault(); return resetGame(); }
+    if(!running||paused||!current) return;
     switch(e.code){
       case'ArrowLeft':e.preventDefault();tryMove(-1,0);break;
       case'ArrowRight':e.preventDefault();tryMove(1,0);break;
       case'ArrowDown':e.preventDefault();softDrop();break;
       case'ArrowUp':e.preventDefault();rotatePiece();break;
       case'Space':e.preventDefault();hardDrop();break;
-      case'KeyP':pauseResume();break;
-      case'KeyR':resetGame();break;
     }
   },{passive:false});
 
-  // Touch controls
+  // Touch controls (don’t steal clicks from top UI)
   document.querySelectorAll('#touchControls button').forEach(btn=>{
     btn.addEventListener('touchstart',e=>{
       e.preventDefault();
@@ -261,8 +325,15 @@
     },{passive:false});
   });
 
-  function boot(){board=empty();queue=[];current=null;score=0;lines=0;level=1;totalSeconds=120;remaining=120;startSpeed=1;fixedSpeed=false;buildBoard();fitBoardToViewport();draw();drawNext();renderLB();}
-  boot();window.addEventListener('resize',fitBoardToViewport);window.addEventListener('orientationchange',fitBoardToViewport);
+  function boot(){
+    board=empty();queue=[];current=null;score=0;lines=0;level=1;totalSeconds=120;remaining=120;startSpeed=1;fixedSpeed=false;
+    buildBoard(); fitBoardToViewport(); draw(); drawNext(); renderLB();
+  }
+  boot();
+  window.addEventListener('resize',fitBoardToViewport);
+  window.addEventListener('orientationchange',fitBoardToViewport);
+  // Re-fit after fonts/UI paint
+  setTimeout(fitBoardToViewport, 50);
 })();
 </script>
 </body>
